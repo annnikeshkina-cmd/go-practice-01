@@ -2,6 +2,7 @@ package main
 
 import "fmt"
 
+// statusLabel превращает код статуса в понятную человеку подпись.
 func statusLabel(status string) string {
 	switch status {
 	case "new":
@@ -15,48 +16,53 @@ func statusLabel(status string) string {
 	}
 }
 
+// countStatus считает количество элементов с заданным статусом.
 func countStatus(statuses []string, target string) int {
-	cnt := 0
-	for _, status := range statuses {
-		if status == target {
-			cnt += 1
+	count := 0
+	for _, statuses := range statuses {
+		if statuses == target {
+			count++
 		}
 	}
-	return cnt
+	return count
 }
+
 func findStatus(statuses []string, target string) int {
-	for i, status := range statuses {
-		if status == target {
+	for i, statuses := range statuses {
+		if statuses == target {
 			return i
 		}
 	}
 	return -1
 }
+
 func completionPercent(statuses []string) float64 {
-	if len(statuses) != 0 {
-		return float64(countStatus(statuses, "done")) / float64(len(statuses)) * 100
+	all := float64(len(statuses))
+	done := float64(countStatus(statuses, "done"))
+	switch all {
+	case 0:
+		return 0
+	default:
+		return done / all
 	}
-	return 0
 }
+
 func main() {
 	statuses := []string{"new", "in_progress", "done", "done"}
 	statuses = append(statuses, "new")
-	fmt.Printf("Задач всего: %d\n", len(statuses))
 
+	fmt.Printf("Задач всего: %d\n", len(statuses))
 	for i, status := range statuses {
 		fmt.Printf("%d. %s\n", i+1, statusLabel(status))
 	}
 	fmt.Printf("Завершено: %d\n", countStatus(statuses, "done"))
-	cnt := make(map[string]int)
+
+	counts := make(map[string]int)
 	for _, status := range statuses {
-		cnt[status]++
+		counts[status]++
 	}
-	order := []string{"new", "in_progress", "done"}
-	fmt.Print("Статистика: ")
-	for _, status := range order {
-		fmt.Printf("%s=%d ", status, cnt[status])
-	}
-	fmt.Printf("\nИндекс первой задачи 'in_progress': %d\n", findStatus(statuses, "in_progress"))
-	fmt.Printf("Индекс первой задачи 'blocked': %d\n", findStatus(statuses, "blocked"))
-	fmt.Printf("Процент завершенных задач: %.2f\n", completionPercent(statuses))
+
+	fmt.Printf("Статистика: new=%d, in_progress=%d, done=%d\n", counts["new"], counts["in_progress"], counts["done"])
+	fmt.Printf("Индекс первого done: %d\n", findStatus(statuses, "done"))
+	fmt.Printf("Доля выполненных задач: %f\n", completionPercent(statuses))
 }
