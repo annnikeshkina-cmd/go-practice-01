@@ -41,8 +41,8 @@ go build ./...
 ## Дополнительные программы
 
 ```text
-go run ./cmd/experiments
-go run ./cmd/time-converter
+go run ./cmd/practice_1/experiments
+go run ./cmd/practice_1/time-converter
 ```
 
 ## Проверенные данные

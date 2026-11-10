@@ -14,7 +14,7 @@
 ## Запуск программы
 
 ``text
-go run ./cmd/task-summary
+go run ./cmd/practice_2/task-summary
 ``
 
 ## Проверка сборки и оформления
@@ -23,13 +23,6 @@ go run ./cmd/task-summary
 go fmt ./...
 go build ./...
 go vet ./...
-```
-
-## Дополнительные программы
-
-```text
-go run ./cmd/experiments
-go run ./cmd/time-converter
 ```
 
 ## Проверенные данные
