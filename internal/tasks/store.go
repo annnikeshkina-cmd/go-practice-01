@@ -2,68 +2,102 @@ package tasks
 
 import (
 	"errors"
-	"testing"
+	"fmt"
+	"strings"
 )
 
-func TestMemoryStoreCRUD(t *testing.T) {
-	s := NewMemoryStore()
-	if _, err := s.Add("  ", 2); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("empty title: %v", err)
-	}
-	if _, err := s.Add("Valid", 0); !errors.Is(err, ErrInvalid) {
-		t.Fatalf("invalid priority: %v", err)
-	}
-	a, err := s.Add("  Изучить Go  ", 2)
-	if err != nil || a.ID != 1 || a.Title != "Изучить Go" {
-		t.Fatalf("first add: %+v, %v", a, err)
-	}
-	if err := s.Complete(a.ID); err != nil {
-		t.Fatal(err)
-	}
-	if err := s.Complete(a.ID); err != nil {
-		t.Fatal(err)
-	}
-	list := s.List()
-	if len(list) != 1 || list[0].Status != "done" {
-		t.Fatalf("complete: %+v", list)
-	}
-	list[0].Title = "Изменено снаружи"
-	got, _ := s.Get(a.ID)
-	if got.Title != "Изучить Go" {
-		t.Fatalf("List leaked store state: %+v", got)
-	}
-	if err := s.Delete(a.ID); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Get(a.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("get deleted ID: %v", err)
-	}
-	if err := s.Delete(a.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("delete twice: %v", err)
-	}
-	b, err := s.Add("Новая задача", 3)
-	if err != nil || b.ID != 2 {
-		t.Fatalf("ID reused: %+v %v", b, err)
-	}
+var (
+	ErrNotFound = errors.New("задача не найдена")
+	ErrInvalid  = errors.New("неверные данные задачи")
+)
+
+type Task struct {
+	ID       int    `json:"id"`
+	Title    string `json:"title"`
+	Status   string `json:"status"`
+	Priority int    `json:"priority"`
 }
 
-func TestRestoreRejectsInvalidStateWithoutChangingStore(t *testing.T) {
-	s := NewMemoryStore()
-	_, _ = s.Add("Исходная", 1)
-	before := s.Snapshot()
-	bad := []State{
-		{NextID: 0},
-		{NextID: 1, Tasks: []Task{{ID: 1, Title: "A", Status: "new", Priority: 1}}},
-		{NextID: 3, Tasks: []Task{{ID: 1, Title: "A", Status: "wrong", Priority: 1}}},
-		{NextID: 3, Tasks: []Task{{ID: 1, Title: "A", Status: "new", Priority: 1}, {ID: 1, Title: "B", Status: "done", Priority: 2}}},
+// State contains both the tasks and the ID counter.
+// Keeping NextID prevents reusing IDs after deletion and restart.
+type State struct {
+	NextID int    `json:"next_id"`
+	Tasks  []Task `json:"tasks"`
+}
+
+type MemoryStore struct {
+	tasks  []Task
+	nextID int
+}
+
+func NewMemoryStore() *MemoryStore {
+	return &MemoryStore{nextID: 1}
+}
+
+func (s *MemoryStore) Add(title string, priority int) (Task, error) {
+	title = strings.TrimSpace(title)
+	if title == "" || priority < 1 || priority > 3 {
+		return Task{}, fmt.Errorf("название или приоритет: %w", ErrInvalid)
 	}
-	for i, state := range bad {
-		if err := s.Restore(state); !errors.Is(err, ErrInvalid) {
-			t.Fatalf("case %d: %v", i, err)
-		}
-		after := s.Snapshot()
-		if after.NextID != before.NextID || len(after.Tasks) != len(before.Tasks) || after.Tasks[0] != before.Tasks[0] {
-			t.Fatalf("case %d modified live state: %+v", i, after)
+	task := Task{ID: s.nextID, Title: title, Status: "new", Priority: priority}
+	s.tasks = append(s.tasks, task)
+	s.nextID++
+	return task, nil
+}
+
+func (s *MemoryStore) Get(id int) (Task, error) {
+	for _, task := range s.tasks {
+		if task.ID == id {
+			return task, nil
 		}
 	}
+	return Task{}, fmt.Errorf("id %d: %w", id, ErrNotFound)
+}
+
+func (s *MemoryStore) Complete(id int) error {
+	for i := range s.tasks {
+		if s.tasks[i].ID == id {
+			s.tasks[i].Status = "done"
+			return nil
+		}
+	}
+	return fmt.Errorf("id %d: %w", id, ErrNotFound)
+}
+
+func (s *MemoryStore) Delete(id int) error {
+	for i := range s.tasks {
+		if s.tasks[i].ID == id {
+			s.tasks = append(s.tasks[:i], s.tasks[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("id %d: %w", id, ErrNotFound)
+}
+
+func (s *MemoryStore) List() []Task {
+	return append([]Task(nil), s.tasks...)
+}
+
+func (s *MemoryStore) Snapshot() State {
+	return State{NextID: s.nextID, Tasks: s.List()}
+}
+
+// Restore checks persisted data BEFORE modifying the store.
+func (s *MemoryStore) Restore(state State) error {
+	if state.NextID < 1 {
+		return fmt.Errorf("next_id должен быть положительным: %w", ErrInvalid)
+	}
+	seen := make(map[int]bool, len(state.Tasks))
+	for _, t := range state.Tasks {
+		if t.ID < 1 || t.ID >= state.NextID ||
+			strings.TrimSpace(t.Title) == "" || t.Title != strings.TrimSpace(t.Title) ||
+			(t.Status != "new" && t.Status != "done") ||
+			t.Priority < 1 || t.Priority > 3 || seen[t.ID] {
+			return fmt.Errorf("некорректная задача id=%d: %w", t.ID, ErrInvalid)
+		}
+		seen[t.ID] = true
+	}
+	s.tasks = append([]Task(nil), state.Tasks...)
+	s.nextID = state.NextID
+	return nil
 }

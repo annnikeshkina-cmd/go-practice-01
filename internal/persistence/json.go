@@ -29,13 +29,14 @@ func Load(path string) (tasks.State, error) {
 	}
 
 	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return tasks.State{}, fmt.Errorf("файл $s должен содержать один JSON объект", path)
+		return tasks.State{}, fmt.Errorf("файл %s должен содержать один JSON объект", path)
 	}
 
 	store := tasks.NewMemoryStore()
 	if err := store.Restore(state); err != nil {
 		return tasks.State{}, fmt.Errorf("валидация состояния в %s: %w", path, err)
 	}
+	return state, nil
 }
 
 func Save(path string, state tasks.State) (err error) {
